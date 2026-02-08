@@ -1,0 +1,466 @@
+project:
+  name: "multi-factor-esg"
+  version: "0.1.0"
+  asof_frequency: "quarterly"   # quarterly|annual
+
+universe:
+  # Peer group constraints used in similarity ranking
+  peer_group:
+    use_sector: true
+    use_geography: true
+    use_size_bucket: true
+    sector_standard: "GICS"     # GICS|NAICS|ICB|custom
+    geography_standard: "ISO2"  # ISO2 country codes
+    size_buckets:
+      - "large"
+      - "mid"
+      - "small"
+
+esg_index:
+  # Composite ESG index construction
+  normalization:
+    # zscore recommended for comparability; robust_zscore for heavy tails
+    method: "zscore"            # zscore|minmax|percentile|robust_zscore
+    by_group:
+      sector: false             # full-sample normalization preserves inter-sector variation
+      region: false
+    winsorize:
+      enabled: true
+      lower_quantile: 0.01
+      upper_quantile: 0.99
+
+  missing_data:
+    # Minimum data completeness to compute a score
+    min_indicator_coverage: 0.60
+    imputation:
+      method: "group_median"    # none|group_median|knn|iterative
+      group_keys: ["sector"]
+
+  # Pillar weights - exploration ranges (to be optimized empirically)
+  pillar_weights:
+    # Initial ranges for optimization
+    E:
+      min: 0.30
+      max: 0.40
+      step: 0.025
+      default: 0.35
+    S:
+      min: 0.30
+      max: 0.40
+      step: 0.025
+      default: 0.35
+    G:
+      min: 0.25
+      max: 0.35
+      step: 0.025
+      default: 0.30
+    # Constraint: E + S + G = 1.0
+    constraint: "sum_to_one"
+
+  # Category weights within each pillar - exploration ranges
+  category_weights:
+    E:
+      emissions:
+        min: 0.35
+        max: 0.45
+        step: 0.025
+        default: 0.40
+      energy:
+        min: 0.20
+        max: 0.30
+        step: 0.025
+        default: 0.25
+      water:
+        min: 0.15
+        max: 0.25
+        step: 0.025
+        default: 0.20
+      waste:
+        min: 0.10
+        max: 0.20
+        step: 0.025
+        default: 0.15
+      constraint: "sum_to_one"
+    S:
+      labor:
+        min: 0.30
+        max: 0.40
+        step: 0.025
+        default: 0.35
+      diversity:
+        min: 0.25
+        max: 0.35
+        step: 0.025
+        default: 0.30
+      health_safety:
+        min: 0.20
+        max: 0.30
+        step: 0.025
+        default: 0.25
+      community:
+        min: 0.08
+        max: 0.15
+        step: 0.025
+        default: 0.10
+      constraint: "sum_to_one"
+    G:
+      board:
+        min: 0.30
+        max: 0.40
+        step: 0.025
+        default: 0.35
+      comp:
+        min: 0.20
+        max: 0.30
+        step: 0.025
+        default: 0.25
+      shareholder_rights:
+        min: 0.15
+        max: 0.25
+        step: 0.025
+        default: 0.20
+      ethics:
+        min: 0.15
+        max: 0.25
+        step: 0.025
+        default: 0.20
+      constraint: "sum_to_one"
+
+similarity:
+  metric: "cosine"              # cosine|euclidean|jaccard
+  # Feature vector built from normalized ESG components; weights applied at feature level
+  feature_weighting:
+    enabled: true
+    source: "materiality"       # uniform|materiality|custom
+  output_scale:
+    min: 0.0
+    max: 1.0
+
+# Financial metrics scoring (beyond ESG)
+financial_scoring:
+  # Financial factor categories - exploration ranges
+  categories:
+    profitability:
+      weight_range:
+        min: 0.25
+        max: 0.35
+        step: 0.025
+        default: 0.30
+      indicator_weights:
+        roa: {min: 0.20, max: 0.30, step: 0.025, default: 0.25}
+        roe: {min: 0.20, max: 0.30, step: 0.025, default: 0.25}
+        net_margin: {min: 0.15, max: 0.25, step: 0.025, default: 0.20}
+        operating_margin: {min: 0.15, max: 0.25, step: 0.025, default: 0.20}
+        free_cashflow: {min: 0.05, max: 0.15, step: 0.025, default: 0.10}
+      constraint: "sum_to_one"
+      indicators:
+        - roa               # Return on Assets
+        - roe               # Return on Equity
+        - net_margin        # Net Profit Margin (computed: net_income/revenue)
+        - operating_margin  # Operating Margin (computed: ebitda/revenue)
+        - free_cashflow     # Free Cash Flow
+    growth:
+      weight_range:
+        min: 0.15
+        max: 0.25
+        step: 0.025
+        default: 0.20
+      indicator_weights:
+        total_revenue: {min: 0.50, max: 0.60, step: 0.025, default: 0.55}
+        ebitda: {min: 0.45, max: 0.55, step: 0.025, default: 0.45}
+      constraint: "sum_to_one"
+      indicators:
+        - total_revenue  # Revenue (proxy for size/growth)
+        - ebitda         # EBITDA (proxy for earnings quality)
+    efficiency:
+      weight_range:
+        min: 0.15
+        max: 0.25
+        step: 0.025
+        default: 0.20
+      indicator_weights:
+        revenue_per_employee: {min: 0.50, max: 0.60, step: 0.025, default: 0.55}
+        r_d_intensity: {min: 0.40, max: 0.50, step: 0.025, default: 0.45}
+      constraint: "sum_to_one"
+      indicators:
+        - revenue_per_employee  # Revenue per Employee (operational efficiency)
+        - r_d_intensity         # R&D as % of Revenue (innovation investment)
+    stability:
+      weight_range:
+        min: 0.10
+        max: 0.20
+        step: 0.025
+        default: 0.15
+      indicator_weights:
+        debt_to_equity: {min: 0.55, max: 0.65, step: 0.025, default: 0.60}
+        market_cap: {min: 0.35, max: 0.45, step: 0.025, default: 0.40}
+      constraint: "sum_to_one"
+      indicators:
+        - debt_to_equity  # Debt-to-Equity Ratio (lower is more stable)
+        - market_cap      # Market Capitalisation (size stability proxy)
+    valuation:
+      weight_range:
+        min: 0.08
+        max: 0.18
+        step: 0.025
+        default: 0.15
+      indicator_weights:
+        trailing_pe: {min: 0.50, max: 0.60, step: 0.025, default: 0.55}
+        price_to_book: {min: 0.40, max: 0.50, step: 0.025, default: 0.45}
+      constraint: "sum_to_one"
+      indicators:
+        - trailing_pe    # Price-to-Earnings (trailing)
+        - price_to_book  # Price-to-Book ratio
+  # Overall financial score category weights must sum to 1.0
+  category_constraint: "sum_to_one"
+  normalization:
+    method: "zscore"
+    by_group:
+      sector: false             # full-sample normalization preserves inter-sector variation
+      region: false
+
+# Market factors (beyond fundamentals) - exploration ranges
+market_factors:
+  categories:
+    liquidity:
+      weight_range:
+        min: 0.35
+        max: 0.45
+        step: 0.025
+        default: 0.40
+      indicator_weights:
+        avg_daily_volume: {min: 0.35, max: 0.45, step: 0.025, default: 0.40}
+        bid_ask_spread: {min: 0.25, max: 0.35, step: 0.025, default: 0.30}
+        free_float_pct: {min: 0.25, max: 0.35, step: 0.025, default: 0.30}
+      constraint: "sum_to_one"
+      indicators:
+        - avg_daily_volume  # Average Daily Trading Volume
+        - bid_ask_spread  # Bid-Ask Spread
+        - free_float_pct  # Free Float Percentage
+    volatility:
+      weight_range:
+        min: 0.25
+        max: 0.35
+        step: 0.025
+        default: 0.30
+      indicator_weights:
+        price_volatility: {min: 0.45, max: 0.55, step: 0.025, default: 0.50}
+        beta: {min: 0.45, max: 0.55, step: 0.025, default: 0.50}
+      constraint: "sum_to_one"
+      indicators:
+        - price_volatility  # Price Volatility (30-day)
+        - beta  # Market Beta
+    momentum:
+      weight_range:
+        min: 0.25
+        max: 0.35
+        step: 0.025
+        default: 0.30
+      indicator_weights:
+        price_momentum_1m: {min: 0.25, max: 0.35, step: 0.025, default: 0.30}
+        price_momentum_3m: {min: 0.35, max: 0.45, step: 0.025, default: 0.40}
+        price_momentum_6m: {min: 0.25, max: 0.35, step: 0.025, default: 0.30}
+      constraint: "sum_to_one"
+      indicators:
+        - price_momentum_1m  # 1-Month Price Momentum
+        - price_momentum_3m  # 3-Month Price Momentum
+        - price_momentum_6m  # 6-Month Price Momentum
+  # Overall market factor category weights must sum to 1.0
+  category_constraint: "sum_to_one"
+  normalization:
+    method: "zscore"
+    by_group:
+      sector: false             # full-sample normalization preserves inter-sector variation
+
+# Operational quality factors - exploration ranges
+operational_quality:
+  categories:
+    efficiency:
+      weight_range:
+        min: 0.30
+        max: 0.40
+        step: 0.025
+        default: 0.35
+      indicator_weights:
+        operating_efficiency: {min: 0.55, max: 0.65, step: 0.025, default: 0.60}
+        cost_management: {min: 0.35, max: 0.45, step: 0.025, default: 0.40}
+      constraint: "sum_to_one"
+      indicators:
+        - operating_efficiency  # Operating Efficiency Score (Revenue per Employee)
+        - cost_management  # Cost Management Score (Operating Expense Ratio)
+    innovation:
+      weight_range:
+        min: 0.20
+        max: 0.30
+        step: 0.025
+        default: 0.25
+      indicator_weights:
+        r_d_intensity: {min: 0.45, max: 0.55, step: 0.025, default: 0.50}
+        patent_count: {min: 0.25, max: 0.35, step: 0.025, default: 0.30}
+        innovation_score: {min: 0.15, max: 0.25, step: 0.025, default: 0.20}
+      constraint: "sum_to_one"
+      indicators:
+        - r_d_intensity  # R&D as % of Revenue
+        - patent_count  # Patent Portfolio (Log-transformed)
+        - innovation_score  # Innovation Index (Composite)
+    market_position:
+      weight_range:
+        min: 0.20
+        max: 0.30
+        step: 0.025
+        default: 0.25
+      indicator_weights:
+        market_share: {min: 0.55, max: 0.65, step: 0.025, default: 0.60}
+        brand_strength: {min: 0.35, max: 0.45, step: 0.025, default: 0.40}
+      constraint: "sum_to_one"
+      indicators:
+        - market_share  # Market Share in Sector
+        - brand_strength  # Brand Value/Strength (when available)
+    management_quality:
+      weight_range:
+        min: 0.10
+        max: 0.20
+        step: 0.025
+        default: 0.15
+      indicator_weights:
+        management_score: {min: 0.55, max: 0.65, step: 0.025, default: 0.60}
+        strategic_clarity: {min: 0.35, max: 0.45, step: 0.025, default: 0.40}
+      constraint: "sum_to_one"
+      indicators:
+        - management_score  # Management Quality Score
+        - strategic_clarity  # Strategic Clarity Index
+  # Overall operational quality category weights must sum to 1.0
+  category_constraint: "sum_to_one"
+
+preference_scoring:
+  # Dynamic weight exploration ranges (to be optimized through backtesting)
+  # Rationale: Weights are NOT arbitrary. Initial ranges come from:
+  #   1. Academic literature on multi-factor models (Fama-French, Carhart)
+  #   2. PCA eigenvalue-based proportional contribution of each factor
+  #   3. Grid search optimization over historical returns
+  #   4. Information ratio contribution of each factor to overall portfolio performance
+  # Final weights will be determined empirically via cross-validated grid search.
+  weight_ranges:
+    esg_score:
+      min: 0.10
+      max: 0.35
+      step: 0.025
+      default: 0.20
+      rationale: "ESG integration adds risk mitigation value; weight reflects materiality"
+    financial_score:
+      min: 0.15
+      max: 0.40
+      step: 0.025
+      default: 0.25
+      rationale: "Core financial quality; highest explanatory power for future returns"
+    market_score:
+      min: 0.05
+      max: 0.20
+      step: 0.025
+      default: 0.10
+      rationale: "Liquidity and momentum signals; moderate predictive power"
+    operational_score:
+      min: 0.05
+      max: 0.20
+      step: 0.025
+      default: 0.10
+      rationale: "Operational efficiency; proxy for sustainable competitive advantage"
+    risk_adjusted_score:
+      min: 0.05
+      max: 0.20
+      step: 0.025
+      default: 0.10
+      rationale: "Sharpe/Sortino based; rewards return per unit risk"
+    growth_score:
+      min: 0.05
+      max: 0.15
+      step: 0.025
+      default: 0.08
+      rationale: "Revenue/earnings growth trajectory; forward-looking momentum"
+    value_score:
+      min: 0.03
+      max: 0.12
+      step: 0.025
+      default: 0.07
+      rationale: "Valuation discipline; penalizes overvalued companies"
+    stability_score:
+      min: 0.03
+      max: 0.12
+      step: 0.025
+      default: 0.05
+      rationale: "Balance sheet resilience; rewards low leverage"
+    similarity_rank:
+      min: 0.01
+      max: 0.06
+      step: 0.01
+      default: 0.03
+      rationale: "Peer-group alignment; diversification benefit"
+    sector_position:
+      min: 0.01
+      max: 0.06
+      step: 0.01
+      default: 0.02
+      rationale: "Within-sector relative strength; sector-neutral adjustment"
+  
+  # Constraint: sum of all weights must equal 1.0
+  constraint: "sum_to_one"
+  
+  # Optimization objective: maximize Sharpe ratio while maintaining ESG threshold
+  optimization:
+    objective: "sharpe_ratio"
+    constraints:
+      min_esg_percentile: 0.75  # Top quartile ESG required
+      min_companies: 20  # Minimum companies in portfolio
+    robustness_tests:
+      time_periods: ["2010-2015", "2016-2020", "2021-2024"]
+      market_regimes: ["bull", "bear", "high_volatility"]
+      cross_validation: true
+      train_period: "2010-2018"
+      test_period: "2019-2024"
+
+  # Investor profiles with 10-factor weights (sum = 1.0)
+  investor_profiles:
+    esg_first:
+      esg_score: 0.35
+      financial_score: 0.15
+      market_score: 0.08
+      operational_score: 0.10
+      risk_adjusted_score: 0.08
+      growth_score: 0.06
+      value_score: 0.05
+      stability_score: 0.05
+      similarity_rank: 0.05
+      sector_position: 0.03
+    balanced:
+      esg_score: 0.15
+      financial_score: 0.25
+      market_score: 0.10
+      operational_score: 0.10
+      risk_adjusted_score: 0.08
+      growth_score: 0.12
+      value_score: 0.08
+      stability_score: 0.05
+      similarity_rank: 0.04
+      sector_position: 0.03
+    financial_first:
+      esg_score: 0.10
+      financial_score: 0.30
+      market_score: 0.10
+      operational_score: 0.10
+      risk_adjusted_score: 0.12
+      growth_score: 0.10
+      value_score: 0.08
+      stability_score: 0.05
+      similarity_rank: 0.03
+      sector_position: 0.02
+
+validation:
+  backtest:
+    lookback_years: 3
+    rebalance_frequency: "quarterly"
+  metrics:
+    - "spearman"
+    - "rmse"
+    - "mae"
+    - "r2"
+

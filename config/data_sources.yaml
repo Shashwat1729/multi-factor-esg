@@ -1,0 +1,80 @@
+data_sources:
+  # Use this file to configure credentials/paths outside code (do NOT commit secrets).
+  # For local development, set environment variables and reference them here.
+
+  public:
+    financial:
+      yahoo_finance:
+        enabled: true
+        library: "yfinance"
+        fields:
+          - "marketCap"
+          - "totalRevenue"
+          - "ebitda"
+          - "netIncomeToCommon"
+          - "returnOnAssets"
+          - "returnOnEquity"
+          - "debtToEquity"
+          - "freeCashflow"
+          - "trailingPE"
+          - "priceToBook"
+    filings:
+      sec_edgar:
+        enabled: true
+        user_agent_env: "SEC_EDGAR_USER_AGENT"   # required by SEC for API access
+
+    sustainability_reports:
+      manual_ingest:
+        enabled: true
+        storage_dir: "data/external/sustainability_reports"
+
+  commercial:
+    refinitiv_lseg:
+      enabled: false
+      coverage_note: "450+ ESG metrics, 10k+ companies"
+      api_key_env: "REFINITIV_API_KEY"
+      api_secret_env: "REFINITIV_API_SECRET"
+
+    msci_esg:
+      enabled: false
+      coverage_note: "8k+ companies, letter-grade scale"
+      api_key_env: "MSCI_API_KEY"
+
+    bloomberg_terminal:
+      enabled: false
+      coverage_note: "11.8k+ companies, 0-100 scale"
+      connection_note: "Requires Terminal/BQuant or enterprise integration"
+
+    sp_global_sustainalytics:
+      enabled: false
+      api_key_env: "SPG_API_KEY"
+
+standardization:
+  provider_mapping:
+    # Canonical indicator names map to provider-specific fields.
+    # Fill these progressively as data becomes available.
+    ghg_scope1:
+      unit: "tCO2e"
+      direction: "lower_is_better"
+      providers:
+        refinitiv: null
+        msci: null
+        bloomberg: null
+        sp_global: null
+    board_independence:
+      unit: "percent"
+      direction: "higher_is_better"
+      providers:
+        refinitiv: null
+        msci: null
+        bloomberg: null
+        sp_global: null
+
+refresh:
+  esg:
+    frequency: "quarterly"
+  financial:
+    frequency: "daily"
+  filings:
+    frequency: "daily"
+
